@@ -35,6 +35,7 @@ export function SelectField({
           <option
             key={option.value}
             value={option.value}
+             className="bg-slate-900 text-white" 
           >
             {option.label}
           </option>
