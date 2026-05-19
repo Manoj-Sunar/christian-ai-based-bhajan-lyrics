@@ -26,14 +26,22 @@ import { LANGUAGES } from "@/app/constants/languages";
 import { useMutation } from "@tanstack/react-query";
 import { publicApi } from "@/app/API/public.api";
 import { LyricsPanel } from "./LyricsPanel";
+import LyricsSkeleton from "../UI/LyricsSkeleton";
 
 export default function SongDetail({ song }: { song: Song }) {
   const [copied, setCopied] = useState(false);
   const [language, setLanguage] = useState(LANGUAGES[0]?.value || "");
+
+
+  // 👉 AI states (NEW)
   const [convertedSong, setConvertedSong] = useState<Song | null>(null);
+  const [showConverted, setShowConverted] = useState(false);
 
   const totalLines = useMemo(() => {
-    return song.lyrics.reduce((acc, s) => acc + (s?.lines?.length || 0), 0);
+    return song.lyrics.reduce(
+      (acc, s) => acc + (s?.lines?.length || 0),
+      0
+    );
   }, [song.lyrics]);
 
   const formatLyrics = useCallback(() => {
@@ -68,20 +76,61 @@ export default function SongDetail({ song }: { song: Song }) {
       publicApi.convertLyrics(id, language),
 
     onSuccess: (res) => {
-      setConvertedSong(res.data.convertedSong);
+      const converted = (res as any)?.data?.convertedSong;
+
+      if (!converted) {
+        console.error("Converted song missing in response", res);
+        return;
+      }
+
+      setConvertedSong(converted);
+      setShowConverted(true);
     },
   });
 
 
 
 
+const convertLyrics = useCallback(async () => {
+  setShowConverted(false); // reset UI
+  setConvertedSong(null);
 
-  const convertLyrics = useCallback(async () => {
   await mutateAsync({
     id: song._id,
     language,
   });
 }, [mutateAsync, song._id, language]);
+
+
+
+  const downloadConverted = () => {
+    if (!convertedSong) return;
+
+    const text = convertedSong.lyrics
+      .map((sec) => `[${sec.name}]\n${sec.lines.join("\n")}`)
+      .join("\n\n");
+
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${convertedSong.title}_translated.txt`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  };
+
+
+  const copyConverted = async () => {
+    if (!convertedSong) return;
+
+    const text = convertedSong.lyrics
+      .map((sec) => `[${sec.name}]\n${sec.lines.join("\n")}`)
+      .join("\n\n");
+
+    await navigator.clipboard.writeText(text);
+  };
 
 
 
@@ -167,10 +216,10 @@ export default function SongDetail({ song }: { song: Song }) {
         </Card>
 
         {/* GRID */}
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 lg:gap-4">
 
           {/* LYRICS */}
-          <div className="xl:col-span-8">
+          <div className="xl:col-span-6">
             <Card className="p-5 sm:p-7 lg:p-10 rounded-3xl bg-white/80 backdrop-blur-xl border border-white/40 shadow-xl shadow-indigo-100/30">
 
               {/* HEADER */}
@@ -201,13 +250,53 @@ export default function SongDetail({ song }: { song: Song }) {
               </div>
 
               {/* LYRICS */}
-              <LyricsPanel title="Original Lyrics" song={song}/>
+              <LyricsPanel title="Original Lyrics" song={song} />
 
             </Card>
           </div>
 
           {/* SIDEBAR */}
-          <div className="xl:col-span-4 space-y-6">
+          <div className="xl:col-span-6 space-y-6">
+
+            {/* AI LYRICS */}
+            <div className="xl:col-span-6">
+              <Card className="p-6">
+
+                <h2 className="font-black mb-4 flex items-center gap-2">
+                  AI Converted Lyrics
+                </h2>
+
+                {/* BEFORE CLICK */}
+                {!showConverted && !isPending && (
+                  <div className="text-center text-gray-400 py-20">
+                    Click Translate to generate AI lyrics
+                  </div>
+                )}
+
+                {/* LOADING SKELETON */}
+                {isPending && (
+                  <LyricsSkeleton />
+                )}
+
+                {/* RESULT */}
+                {showConverted && convertedSong && !isPending && (
+                  <>
+                    <div className="flex gap-2 mb-4">
+                      <Button onClick={copyConverted} variant="secondary">
+                        <Copy size={14} /> Copy
+                      </Button>
+
+                      <Button onClick={downloadConverted} variant="secondary">
+                        <Download size={14} /> Download
+                      </Button>
+                    </div>
+
+                    <LyricsPanel song={convertedSong} title="AI Converted Lyrics" />
+                  </>
+                )}
+
+              </Card>
+            </div>
 
             <SidebarCard title="Song Info">
               <SidebarItem icon={<Music2 />} label="Scale" value={song.scale} />
@@ -233,6 +322,7 @@ export default function SongDetail({ song }: { song: Song }) {
                 <p className="text-sm text-slate-400">No tags</p>
               )}
             </SidebarCard>
+
 
           </div>
 
