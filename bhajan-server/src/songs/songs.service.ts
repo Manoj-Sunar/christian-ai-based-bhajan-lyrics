@@ -73,6 +73,8 @@ export class SongsService {
     private cleanAIResponse(
         text: string,
     ): string {
+        if (!text) return '';
+
         return text
             .replace(/```json/g, '')
             .replace(/```/g, '')
@@ -80,35 +82,100 @@ export class SongsService {
     }
 
     // ====================================
-    // SAFE JSON EXTRACTION
+    // EXTRACT JSON
     // ====================================
 
     private extractJSON(text: string) {
         try {
             const match =
                 text.match(
-                    /\{[\s\S]*\}/,
+                    /(\{[\s\S]*\})/,
                 );
 
-            if (!match) {
+            if (!match?.[1]) {
                 return null;
             }
 
             return JSON.parse(
-                match[0],
+                match[1],
             );
-        } catch {
+        } catch (error) {
+
+            this.logger.error(
+                'JSON extraction failed',
+                error,
+            );
+
             return null;
         }
     }
 
     // ====================================
-    // GENERATE UNIQUE SLUG
+    // CLEAN AI TEXT
+    // ====================================
+
+    private cleanAIText(
+        text: string,
+    ): string {
+
+        if (!text) return '';
+
+        return text
+            .replace(/\*\*/g, '')
+            .replace(/\\n/g, '\n')
+            .replace(/\\/g, '')
+            .replace(
+                /^\s*\*\s?/gm,
+                '• ',
+            )
+            .replace(/（/g, '(')
+            .replace(/）/g, ')')
+            .replace(
+                /[ \t]+/g,
+                ' ',
+            )
+            .replace(
+                /\n{3,}/g,
+                '\n\n',
+            )
+            .trim();
+    }
+
+    // ====================================
+    // NORMALIZE EXPLANATION
+    // ====================================
+
+    private normalizeExplanation(
+        data: any[],
+    ) {
+
+        if (!Array.isArray(data)) {
+            return [];
+        }
+
+        return data.map(
+            (item) => ({
+                title:
+                    this.cleanAIText(
+                        item?.title || '',
+                    ),
+
+                content:
+                    this.cleanAIText(
+                        item?.content || '',
+                    ),
+            }),
+        );
+    }
+
+    // ====================================
+    // GENERATE SLUG
     // ====================================
 
     private generateSlug(
         title: string,
     ) {
+
         return `${slugify(title, {
             lower: true,
             strict: true,
@@ -116,15 +183,12 @@ export class SongsService {
         })}-${Date.now()}`;
     }
 
-
-
-
-    
     // ====================================
     // GET SONG BY ID
     // ====================================
 
     async getSongById(id: string) {
+
         if (
             !Types.ObjectId.isValid(id)
         ) {
@@ -167,9 +231,6 @@ export class SongsService {
         return song;
     }
 
-
-
-
     // ====================================
     // GET SONG BY SLUG
     // ====================================
@@ -177,6 +238,7 @@ export class SongsService {
     async getSongBySlug(
         slug: string,
     ) {
+
         const cacheKey =
             this.cacheKeys.songBySlug(
                 slug,
@@ -211,15 +273,12 @@ export class SongsService {
         return song;
     }
 
-
-
-
-
     // ====================================
     // GET ALL SONGS
     // ====================================
 
     async getAllSongs() {
+
         const cacheKey =
             this.cacheKeys.songsAll();
 
@@ -259,6 +318,7 @@ export class SongsService {
         page = 1,
         limit = 10,
     ) {
+
         const cacheKey =
             this.cacheKeys.songsPage(
                 page,
@@ -279,6 +339,7 @@ export class SongsService {
 
         const [songs, total] =
             await Promise.all([
+
                 this.songModel
                     .find({
                         isActive: true,
@@ -302,6 +363,7 @@ export class SongsService {
             total,
             page,
             limit,
+
             totalPages:
                 Math.ceil(
                     total / limit,
@@ -318,12 +380,14 @@ export class SongsService {
     }
 
     // ====================================
-    // EXPLAIN SONG LYRICS
+    // EXPLAIN LYRICS
     // ====================================
 
     async explainLyrics(
         songId: string,
+        language: string,
     ) {
+
         const song: any =
             await this.getSongById(
                 songId,
@@ -346,42 +410,143 @@ You are a Christian theologian and worship song analyst.
 
 Analyze this worship song deeply.
 
-Song Title:
+IMPORTANT RULES:
+- Output MUST be VALID JSON ONLY
+- DO NOT use markdown
+- DO NOT use code blocks
+- DO NOT write explanation outside JSON
+- Response language must be ${language}
+- Use simple and meaningful Christian language
+- Use only biblical/spiritual wording
+- Do not use Hindu religious terminology
+- Use real Bible verses only
+- Keep pastoral tone
+- Keep worship context
+
+RETURN FORMAT:
+
+{
+  "explanation": [
+    {
+      "title": "1. Main Meaning",
+      "content": "..."
+    },
+    {
+      "title": "2. Spiritual Message",
+      "content": "..."
+    },
+    {
+      "title": "3. Biblical Context",
+      "content": "..."
+    },
+    {
+      "title": "4. Related Bible Verses",
+      "content": "..."
+    },
+    {
+      "title": "5. Worship Theme",
+      "content": "..."
+    },
+    {
+      "title": "6. Emotional Tone",
+      "content": "..."
+    },
+    {
+      "title": "7. Practical Christian Life Application",
+      "content": "..."
+    }
+  ]
+}
+
+SONG TITLE:
 ${song.title}
 
-Category:
+CATEGORY:
 ${song.category}
 
-Lyrics:
+LYRICS:
 ${lyricsText}
-
-Return response in this format:
-
-1. Main Meaning
-2. Spiritual Message
-3. Biblical Context
-4. Related Bible Verses
-5. Worship Theme
-6. Emotional Tone
-7. Practical Christian Life Application
-
-Important:
-- Explain in simple human language
-- Use proper Bible verses
-- Do not hallucinate fake verses
-- Keep theological consistency
-- Response should feel pastoral and spiritual
 `;
 
-        const response =
-            await this.aiService.generate(
-                prompt,
+        try {
+
+            const response =
+                await this.aiService.generate(
+                    prompt,
+                );
+
+            this.logger.log(
+                response,
             );
 
-        return {
-            song: song.title,
-            explanation: response,
-        };
+            let parsed: any;
+
+            try {
+
+                parsed =
+                    JSON.parse(
+                        this.cleanAIResponse(
+                            response,
+                        ),
+                    );
+
+            } catch {
+
+                parsed =
+                    this.extractJSON(
+                        response,
+                    );
+            }
+
+            if (
+                !parsed ||
+                !Array.isArray(
+                    parsed.explanation,
+                )
+            ) {
+
+                this.logger.error(
+                    'Invalid AI explanation response',
+                    response,
+                );
+
+                return {
+                    song:
+                        song.title,
+
+                    explanation: [
+                        {
+                            title:
+                                'Explanation Unavailable',
+
+                            content:
+                                'AI could not generate structured explanation.',
+                        },
+                    ],
+                };
+            }
+
+            return {
+                song:
+                    song.title,
+
+                explanation:
+                    this.normalizeExplanation(
+                        parsed.explanation,
+                    ),
+            };
+
+        } catch (error) {
+
+            this.logger.error(
+                'Explain lyrics failed',
+                error,
+            );
+
+            throw ErrorUtil.internal(
+                'Lyrics explanation failed',
+            );
+        }
     }
 
     // ====================================
@@ -392,6 +557,7 @@ Important:
         songId: string,
         language: string,
     ) {
+
         const song: any =
             await this.getSongById(
                 songId,
@@ -409,6 +575,7 @@ Important:
         const lyricsText =
             song.lyrics
                 .map((s: any) => {
+
                     const chordText =
                         s.chords &&
                             Array.isArray(
@@ -485,12 +652,11 @@ ${lyricsText}
 `;
 
         try {
+
             const aiResponse =
                 await this.aiService.generate(
                     prompt,
                 );
-
-            // CLEAN RESPONSE
 
             const cleaned =
                 this.cleanAIResponse(
@@ -499,14 +665,15 @@ ${lyricsText}
 
             let parsed: any;
 
-            // TRY PARSE
-
             try {
+
                 parsed =
                     JSON.parse(
                         cleaned,
                     );
+
             } catch {
+
                 parsed =
                     this.extractJSON(
                         aiResponse,
@@ -517,8 +684,9 @@ ${lyricsText}
                 !parsed ||
                 !parsed.translatedSong
             ) {
+
                 this.logger.error(
-                    'Invalid AI response:',
+                    'Invalid AI response',
                     aiResponse,
                 );
 
@@ -527,8 +695,6 @@ ${lyricsText}
                 );
             }
 
-            // VALIDATE LYRICS
-
             if (
                 !Array.isArray(
                     parsed
@@ -536,19 +702,21 @@ ${lyricsText}
                         .lyrics,
                 )
             ) {
+
                 throw ErrorUtil.internal(
                     'AI lyrics format invalid',
                 );
             }
 
-            const convertedSong =
-            {
+            const convertedSong = {
+
                 title:
                     parsed.title,
 
-                slug: this.generateSlug(
-                    parsed.title,
-                ),
+                slug:
+                    this.generateSlug(
+                        parsed.title,
+                    ),
 
                 category:
                     song.category,
@@ -565,6 +733,7 @@ ${lyricsText}
                             sec: any,
                             index: number,
                         ) => {
+
                             const lines =
                                 Array.isArray(
                                     sec.lines,
@@ -580,6 +749,7 @@ ${lyricsText}
                                     : [];
 
                             return {
+
                                 name:
                                     sec.name ||
                                     `Section ${index + 1}`,
@@ -599,13 +769,13 @@ ${lyricsText}
                     ),
 
                 tags:
-                    song.tags ||
-                    [],
+                    song.tags || [],
 
                 isActive: true,
             };
 
             return {
+
                 originalSongId:
                     song._id,
 
@@ -616,8 +786,12 @@ ${lyricsText}
 
                 convertedSong,
             };
+
         } catch (err) {
-            this.logger.error(err);
+
+            this.logger.error(
+                err,
+            );
 
             throw ErrorUtil.internal(
                 'Lyrics conversion failed',

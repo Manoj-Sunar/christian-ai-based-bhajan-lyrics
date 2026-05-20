@@ -136,11 +136,13 @@ export class SongsController {
 
 
 
-    @Get('explain/:id')
+    @Post('explain/:id')
     @HttpCode(HttpStatus.OK)
     async explainLyrics(
         @Param('id')
         id: string,
+        @Body()
+        language:{language:string}
     ) {
 
         this.logger.log(
@@ -150,6 +152,7 @@ export class SongsController {
         const result =
             await this.songsService.explainLyrics(
                 id,
+                language.language,
             );
 
         return {
@@ -170,8 +173,7 @@ export class SongsController {
         language:{language:string}
     ) {
 
-        console.log(language.language)
-
+        
         this.logger.log(
             `Converting lyrics for song id: ${id}`,
         );

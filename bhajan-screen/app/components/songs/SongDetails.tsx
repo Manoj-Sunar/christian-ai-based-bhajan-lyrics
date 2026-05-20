@@ -17,7 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-import { ConvertLyricsResponse, Song } from "@/app/types";
+import { ConvertLyricsResponse, ExplainLyricsResponse, Song } from "@/app/types";
 import Button from "../UI/Button";
 import { Card } from "../UI/Card";
 import { Badge, IconBadge, SidebarCard, SidebarItem } from "../UI/SongUI";
@@ -35,6 +35,9 @@ export default function SongDetail({ song }: { song: Song }) {
   const [language, setLanguage] = useState(LANGUAGES[0]?.value || "");
   const [convertedSong, setConvertedSong] = useState<Song | null>(null);
   const [showConverted, setShowConverted] = useState(false);
+
+
+
 
   const formatSongLyrics = useCallback((s: Song) => {
     return s.lyrics
@@ -54,15 +57,22 @@ export default function SongDetail({ song }: { song: Song }) {
       .join("\n\n");
   }, []);
 
+
+
   const formattedLyrics = useMemo(
     () => formatSongLyrics(song),
     [song, formatSongLyrics]
   );
 
+
+
   const totalLines = useMemo(
     () => song.lyrics.reduce((a, s) => a + (s?.lines?.length || 0), 0),
     [song.lyrics]
   );
+
+
+
 
   // ---------------- COPY ----------------
   const copyOriginalLyrics = useCallback(async () => {
@@ -70,6 +80,9 @@ export default function SongDetail({ song }: { song: Song }) {
     setCopiedOriginal(true);
     setTimeout(() => setCopiedOriginal(false), 1200);
   }, [formattedLyrics]);
+
+
+
 
   // ---------------- EXPORT ----------------
   const exportOriginalLyrics = useCallback(() => {
@@ -83,6 +96,9 @@ export default function SongDetail({ song }: { song: Song }) {
 
     URL.revokeObjectURL(url);
   }, [formattedLyrics, song.title]);
+
+
+
 
   // ---------------- PRINT ----------------
   const printOriginalLyrics = useCallback(() => {
@@ -123,6 +139,10 @@ export default function SongDetail({ song }: { song: Song }) {
     win.print();
   }, [formattedLyrics, song.title]);
 
+
+
+
+// 
   const { mutateAsync, isPending } = useMutation<
     ConvertLyricsResponse,
     Error,
@@ -140,6 +160,9 @@ export default function SongDetail({ song }: { song: Song }) {
     },
   });
 
+
+
+  // convert lyrics
   const convertLyrics = useCallback(async () => {
     setShowConverted(false);
     setConvertedSong(null);
@@ -150,11 +173,17 @@ export default function SongDetail({ song }: { song: Song }) {
     });
   }, [mutateAsync, song._id, language]);
 
+
+
+  // formatted converted lyrics
   const formattedConvertedLyrics = useMemo(() => {
     if (!convertedSong) return "";
     return formatSongLyrics(convertedSong);
   }, [convertedSong, formatSongLyrics]);
 
+
+
+  // copy converted lyrics
   const copyConverted = useCallback(async () => {
     if (!convertedSong) return;
     await navigator.clipboard.writeText(formattedConvertedLyrics);
@@ -162,6 +191,8 @@ export default function SongDetail({ song }: { song: Song }) {
     setTimeout(() => setCopiedConverted(false), 1200);
   }, [convertedSong, formattedConvertedLyrics]);
 
+
+  // download converted lyrics
   const downloadConverted = useCallback(() => {
     if (!convertedSong) return;
 
@@ -178,6 +209,22 @@ export default function SongDetail({ song }: { song: Song }) {
 
     URL.revokeObjectURL(url);
   }, [convertedSong, formattedConvertedLyrics]);
+
+
+
+  // explain lyrics
+  const {mutateAsync:LyricsExplain,isPending:explainLyricsPending}=useMutation<ExplainLyricsResponse,Error,{id:string,language:string}>({
+    mutationFn:({ id, language })=>publicApi.explainLyrics(id,language),
+    onSuccess:(data)=>{
+         console.log(data);
+    }
+  });
+
+
+  const explainLyrics=useCallback(async(id:string)=>{
+            await LyricsExplain({id,language})
+  },[LyricsExplain,song._id,language])
+
 
   return (
     <div className="min-h-screen bg-[#f6f7fb]">
@@ -233,8 +280,8 @@ export default function SongDetail({ song }: { song: Song }) {
                 {isPending ? <Loader2 className="animate-spin" /> : "Translate"}
               </Button>
 
-              <Button variant="secondary">
-                <Sparkles /> Explain
+              <Button variant="secondary" onClick={()=>explainLyrics(song._id)}>
+                <Sparkles /> {explainLyricsPending?<Loader2/>:"Explain"}
               </Button>
 
             </div>

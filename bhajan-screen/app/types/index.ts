@@ -68,6 +68,27 @@ export interface ConvertLyricsResponse {
   };
 }
 
+
+
+
+// type of explain lyrics response
+interface ExplainContent {
+  title: string,
+  content: string,
+}
+
+interface SongExplanation {
+  song: string,
+  explanation: ExplainContent[],
+}
+
+
+export interface ExplainLyricsResponse {
+  success: boolean;
+  message: string;
+  data: SongExplanation
+}
+
 export type View =
   | "/admin/dashboard"
   | "/admin/songs"

@@ -1,4 +1,4 @@
-import { AllSongsResponse, SongDetailsResponse } from "../types";
+import { AllSongsResponse, ConvertLyricsResponse, ExplainLyricsResponse, SongDetailsResponse } from "../types";
 import { apiClient } from "./apiService"
 
 export const publicApi = {
@@ -27,8 +27,12 @@ export const publicApi = {
 
 
 
-    convertLyrics:async(id:string,language:string)=>{
+    convertLyrics:async(id:string,language:string):Promise<ConvertLyricsResponse>=>{
         return apiClient.post(`/songs/convert/${id}`,{language:language});
+    },
+
+    explainLyrics:async(id:string,language:string):Promise<ExplainLyricsResponse>=>{
+        return apiClient.post(`/songs/explain/${id}`,{language:language})
     }
 
 }
