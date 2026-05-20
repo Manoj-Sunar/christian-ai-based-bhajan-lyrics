@@ -1,7 +1,8 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { publicApi } from "../API/public.api";
-import SongDetail from "../components/songs/SongDetails";
+import SongDetail from "../components/song-details/SongDetails";
+
 
 
 interface SongPageProps {

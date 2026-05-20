@@ -1,72 +1,43 @@
 import { Suspense } from "react";
-
-import { publicApi } from "@/app/API/public.api";
-import { Song } from "@/app/types";
-
-
+import { publicApi } from "./API/public.api";
+import PublicLayout from "./components/Layout/PublicLayout";
 import SongToolbar from "./components/songs/SongsToolbar";
-import PublicSongShow from "./components/songs/PublicSongsShow";
-import PublicNav from "./components/common/Header";
+import SongsList from "./components/songs/SongsList";
 
 
-
-
-interface Props {
-  searchParams: Promise<{
-    q?: string;
-    category?: string;
-    tempo?: string;
-  }>;
-}
-
-async function getSongs(): Promise<Song[]> {
+async function getSongs() {
   try {
     const res = await publicApi.getAllSongs();
-
-    if (!res?.success) {
-      return [];
-    }
-
-    return res.data || [];
-  } catch (error) {
-    console.error("Failed to fetch songs:", error);
+    return res?.success ? res.data ?? [] : [];
+  } catch {
     return [];
   }
 }
 
 export default async function Home() {
-
-
   const songs = await getSongs();
 
   return (
-    <div className="
-  min-h-screen
-  bg-gradient-to-br
-  from-slate-50 via-indigo-50/40 to-purple-50/40
-">
-      <div className="md:w-[80%] mx-auto px-4 py-6 space-y-6">
-
-        <PublicNav />
-
-        <div className="
-      bg-white/60 backdrop-blur-xl
-      border border-white/40
-      rounded-3xl
-      p-4 shadow-lg
-    ">
-          <SongToolbar />
-        </div>
-
-        <Suspense fallback={
-          <div className="text-center text-slate-400 py-10">
-            Loading songs...
-          </div>
-        }>
-          <PublicSongShow songs={songs} />
-        </Suspense>
-
+    <PublicLayout>
+      {/* Header Section */}
+      <div className="space-y-1 mb-8">
+        <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900">
+          Hymn Library
+        </h1>
+        <p className="text-slate-500">
+          Explore sacred Nepali Christian songs with insights
+        </p>
       </div>
-    </div>
+
+      {/* Toolbar */}
+      <div className="mb-8">
+        <SongToolbar />
+      </div>
+
+      {/* Song List */}
+      <Suspense fallback={<p className="text-slate-400">Loading songs...</p>}>
+        <SongsList songs={songs} />
+      </Suspense>
+    </PublicLayout>
   );
 }
