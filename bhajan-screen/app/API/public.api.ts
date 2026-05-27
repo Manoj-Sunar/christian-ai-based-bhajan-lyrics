@@ -21,8 +21,8 @@ export const publicApi = {
     },
 
 
-    getSongById:async(id:string)=>{
-        return apiClient.get<SongDetailsResponse>(`/songs/${id}`)
+    getSongById:async(id:string,config?:any)=>{
+        return apiClient.get<SongDetailsResponse>(`/songs/${id}`,config)
     },
 
 

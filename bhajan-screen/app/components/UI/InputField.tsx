@@ -25,7 +25,8 @@ export function InputField({
       <input
         className={cn(
           fieldStyles,
-          error && "border-red-500 focus:ring-red-500",
+          "h-12",
+          error && "border-red-400 focus:ring-red-100",
           className
         )}
         {...props}

@@ -1,14 +1,117 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=EB+Garamond:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
 
+/* ========================================
+   THEME TOKENS
+======================================== */
+
 @theme {
+  /* Fonts */
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "EB Garamond", serif;
+
+  /* Base */
+  --color-background: #f9f9f7;
+  --color-foreground: #1a1c1b;
+
+  /* Surface */
+  --color-surface: #f9f9f7;
+  --color-surface-dim: #dadad8;
+  --color-surface-bright: #f9f9f7;
+
+  --color-surface-lowest: #ffffff;
+  --color-surface-low: #f4f4f2;
+  --color-surface-container: #eeeeec;
+  --color-surface-high: #e8e8e6;
+  --color-surface-highest: #e2e3e1;
+
+  --color-surface-variant: #e2e3e1;
+
+  /* Primary */
+  --color-primary: #000000;
+  --color-primary-container: #0d1d2d;
+  --color-primary-fixed: #d4e4fa;
+  --color-primary-fixed-dim: #b8c8de;
+
+  /* Secondary */
+  --color-secondary: #735c00;
+  --color-secondary-container: #fed65b;
+  --color-secondary-fixed: #ffe088;
+  --color-secondary-fixed-dim: #e9c349;
+
+  /* Tertiary */
+  --color-tertiary: #000000;
+  --color-tertiary-container: #002018;
+  --color-tertiary-fixed: #93f5d6;
+  --color-tertiary-fixed-dim: #77d8ba;
+
+  /* Error */
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+
+  /* Text / On Colors */
+  --color-on-background: #1a1c1b;
+  --color-on-surface: #1a1c1b;
+  --color-on-surface-variant: #44474c;
+
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #768599;
+  --color-on-primary-fixed: #0d1d2d;
+  --color-on-primary-fixed-variant: #39485a;
+
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #745c00;
+  --color-on-secondary-fixed: #241a00;
+  --color-on-secondary-fixed-variant: #574500;
+
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #2b9479;
+  --color-on-tertiary-fixed: #002018;
+  --color-on-tertiary-fixed-variant: #005140;
+
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+
+  /* Borders */
+  --color-outline: #74777d;
+  --color-outline-variant: #c4c6cd;
+
+  /* Inverse */
+  --color-inverse-surface: #2f3130;
+  --color-inverse-on-surface: #f1f1ef;
+  --color-inverse-primary: #b8c8de;
+
+  /* Misc */
+  --color-surface-tint: #516072;
 }
+
+/* ========================================
+   BASE LAYER
+======================================== */
 
 @layer base {
   body {
-    @apply antialiased;
+    @apply antialiased bg-background text-foreground font-sans;
+  }
+
+  .font-serif {
+    font-family: var(--font-serif);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
   }
 }
 
+
+/* Hide scrollbar (clean UI like modern apps) */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
