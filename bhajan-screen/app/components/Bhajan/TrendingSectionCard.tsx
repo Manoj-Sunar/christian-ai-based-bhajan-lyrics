@@ -1,6 +1,7 @@
 
 import { Song } from "@/app/types";
 import BhajanCard from "./BhajanCard";
+import { SongProvider } from "@/app/providers/SongContext";
 
 interface ITrendingBhajans{
   bhajans:Song[]
@@ -13,7 +14,9 @@ export default async function TrendingSection({bhajans}:ITrendingBhajans) {
    
 
   return (
+    
     <section className="px-6 lg:px-16 py-16">
+      
       <div className="flex items-center justify-between mb-10">
         <div>
           <h2 className="text-4xl font-serif">
@@ -34,12 +37,11 @@ export default async function TrendingSection({bhajans}:ITrendingBhajans) {
         {bhajans.map((item) => (
           <BhajanCard
             key={item._id}
-            title={item.title}
-            description={item.lyrics[0].lines[0]}
-            tag={item.tags}
+           song={item}
           />
         ))}
       </div>
     </section>
+    
   );
 }

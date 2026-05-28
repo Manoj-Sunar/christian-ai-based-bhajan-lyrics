@@ -1,5 +1,6 @@
 import Navbar from "../components/Layout/Navbar";
 import Sidebar from "../components/Layout/Sidebar";
+import { SongProvider } from "../providers/SongContext";
 
 export default function MainLayout({
   children,
@@ -7,6 +8,8 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
+    <SongProvider>
+
     <div className="bg-background text-foreground min-h-screen">
       <Navbar />
       <Sidebar />
@@ -15,5 +18,7 @@ export default function MainLayout({
         {children}
       </main>
     </div>
+    </SongProvider>
+  
   );
 }

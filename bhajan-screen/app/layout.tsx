@@ -19,7 +19,7 @@ export default function RootLayout({
           {children}
           </QueryProvider>
         </main>
-        <Footer/>
+        
       </body>
     </html>
   );

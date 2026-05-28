@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Hero from "../components/home/Hero";
 import TrendingSection from "../components/Bhajan/TrendingSectionCard";
 import RecentList from "../components/Bhajan/RecentListCard";
-import TranslationCard from "../components/Bhajan/TranslationCard";
 import { getAllSongsServer } from "../lib/song.server";
 
 
@@ -107,13 +106,9 @@ export default async function HomePage() {
 
         <section className="px-6 py-16 lg:px-16">
           <div className="grid gap-8 lg:grid-cols-12">
-            <div className="lg:col-span-7">
+            <div className="lg:col-span-12">
               <RecentList recentBhajan={songs} />
             </div>
-
-            <aside className="lg:col-span-5">
-              <TranslationCard />
-            </aside>
           </div>
         </section>
       </main>
