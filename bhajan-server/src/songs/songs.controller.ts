@@ -55,52 +55,7 @@ export class SongsController {
 
 
 
-    // ====================================
-    // GET PAGINATED SONGS
-    // GET /songs/paginated?page=1&limit=10
-    // ====================================
-
-    @Get('paginated')
-    @HttpCode(HttpStatus.OK)
-    async getPaginatedSongs(
-
-        @Query(
-            'page',
-            new DefaultValuePipe(1),
-            ParseIntPipe,
-        )
-        page: number,
-
-        @Query(
-            'limit',
-            new DefaultValuePipe(10),
-            ParseIntPipe,
-        )
-        limit: number,
-    ) {
-
-        this.logger.log(
-            `Fetching paginated songs page=${page} limit=${limit}`,
-        );
-
-        // optional safety limits
-        if (limit > 100) {
-            limit = 100;
-        }
-
-        const result =
-            await this.songsService.getPaginatedSongs(
-                page,
-                limit,
-            );
-
-        return {
-            success: true,
-            message:
-                'Paginated songs fetched successfully',
-            ...result,
-        };
-    }
+    
 
 
 

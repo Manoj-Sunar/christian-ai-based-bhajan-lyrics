@@ -10,6 +10,7 @@ export class AiService {
 
     constructor(
         private readonly config: ConfigService,
+
     ) {
 
         this.apiKey =
@@ -33,7 +34,12 @@ export class AiService {
                 'OPEN_ROUTER_MODEL missing',
             );
         }
+
+
+
     }
+
+
 
     async generate(prompt: string) {
 
@@ -81,4 +87,10 @@ export class AiService {
             );
         }
     }
+
+
+  
+
+
+
 }

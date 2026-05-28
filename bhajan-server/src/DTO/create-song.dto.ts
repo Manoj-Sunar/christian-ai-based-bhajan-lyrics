@@ -5,18 +5,15 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Max,
-  MaxLength,
   Min,
   MinLength,
+  MaxLength,
   ValidateNested,
   ArrayMinSize,
 } from 'class-validator';
 
 import { Type } from 'class-transformer';
 import { Category, Tempo } from '../Model/lyrics.model';
-
-
 
 class LyricSectionDto {
   @IsString()
@@ -30,11 +27,12 @@ class LyricSectionDto {
   @IsString({ each: true })
   lines!: string[];
 
-  // ✅ FIXED: proper nested validation
   @IsArray()
   chords!: string[][];
 
   @IsOptional()
+  @IsInt()
+  @Min(1)
   repeat?: number;
 }
 

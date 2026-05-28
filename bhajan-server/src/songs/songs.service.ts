@@ -314,70 +314,7 @@ export class SongsService {
     // GET PAGINATED SONGS
     // ====================================
 
-    async getPaginatedSongs(
-        page = 1,
-        limit = 10,
-    ) {
-
-        const cacheKey =
-            this.cacheKeys.songsPage(
-                page,
-                limit,
-            );
-
-        const cached =
-            await this.redis.get(
-                cacheKey,
-            );
-
-        if (cached) {
-            return cached;
-        }
-
-        const skip =
-            (page - 1) * limit;
-
-        const [songs, total] =
-            await Promise.all([
-
-                this.songModel
-                    .find({
-                        isActive: true,
-                    })
-                    .sort({
-                        createdAt: -1,
-                    })
-                    .skip(skip)
-                    .limit(limit)
-                    .lean(),
-
-                this.songModel.countDocuments(
-                    {
-                        isActive: true,
-                    },
-                ),
-            ]);
-
-        const result = {
-            data: songs,
-            total,
-            page,
-            limit,
-
-            totalPages:
-                Math.ceil(
-                    total / limit,
-                ),
-        };
-
-        await this.redis.set(
-            cacheKey,
-            result,
-            this.CACHE_TTL,
-        );
-
-        return result;
-    }
+ 
 
     // ====================================
     // EXPLAIN LYRICS

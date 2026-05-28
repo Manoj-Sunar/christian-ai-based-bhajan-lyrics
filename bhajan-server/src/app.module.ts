@@ -10,6 +10,10 @@ import { AuthModule } from './auth/auth.module';
 import { SongsModule } from './songs/songs.module';
 import { AiService } from './ai/ai.service';
 import { AiModule } from './ai/ai.module';
+import { SearchModule } from './search/search.module';
+import { EmbeddingModule } from './embedding/embedding.module';
+import { InteractionModule } from './interaction/interaction.module';
+import { RecommendationModule } from './recommendation/recommendation.module';
 @Module({
   imports: [
 
@@ -54,7 +58,23 @@ import { AiModule } from './ai/ai.module';
 
 
 
-    AiModule],
+    AiModule,
+
+
+
+    SearchModule,
+
+
+
+    EmbeddingModule,
+
+
+
+    InteractionModule,
+
+
+
+    RecommendationModule],
   controllers: [AppController],
   providers: [AppService, AiService],
 })
