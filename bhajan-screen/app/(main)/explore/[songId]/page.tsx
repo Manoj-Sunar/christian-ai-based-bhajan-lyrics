@@ -6,6 +6,7 @@ import { Clock3, Music2, Tag, Hash } from "lucide-react";
 
 import { publicApi } from "@/app/API/public.api";
 import { Song } from "@/app/types";
+import LyricsShow from "@/app/components/Bhajan/LyricsShow";
 
 const SITE_NAME = "Prabhu Ko Stuti";
 const SITE_URL = "https://yourdomain.com";
@@ -152,6 +153,8 @@ const SongDetails = async ({ params }: IParams) => {
 
   const song = await getSong(songId);
 
+  console.log(song)
+
   return (
     <>
       {/* JSON LD */}
@@ -248,34 +251,8 @@ const SongDetails = async ({ params }: IParams) => {
                 </div>
 
                 {/* LYRICS */}
-                <div className="px-5 py-8 md:px-8 md:py-10">
-                  <div className="space-y-8">
-                    {section.lines?.map((line, index) => {
-                      const chord = section.chords?.[index]?.[0];
-
-                      return (
-                        <div
-                          key={index}
-                          className="group relative rounded-2xl border border-transparent p-4 transition-all duration-300 hover:border-primary/20 hover:bg-primary/[0.03]"
-                        >
-                        
-
-                          {/* CHORD */}
-                          {chord && (
-                            <div className="mb-2 inline-flex items-center rounded-xl border border-primary/20 bg-primary/10 px-3 py-1 text-sm font-bold tracking-wide text-primary shadow-sm">
-                              ♪ {chord}
-                            </div>
-                          )}
-
-                          {/* LYRIC */}
-                          <p className="text-xl leading-[2.2rem] tracking-wide text-foreground md:text-2xl">
-                            {line}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+              
+                 <LyricsShow section={section}/>
               </div>
             ))}
           </div>

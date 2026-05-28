@@ -7,64 +7,50 @@ import {
   ExplainLyricsResponse,
 } from "../types";
 
-/**
- * TRANSLATE LYRICS
- */
+
+
+
+
 export function useTranslateLyrics(
   songId?: string,
   language: string = "English"
 ) {
-  return useQuery<ConvertLyricsResponse>({
-    queryKey: ["translate-lyrics", songId, language],
+  return useQuery({
+    queryKey: ["translate", songId, language],
 
     queryFn: async () => {
       if (!songId) {
-        throw new Error("Song ID is required");
+        throw new Error("Song ID required");
       }
 
-      return await publicApi.convertLyrics(
+      return publicApi.convertLyrics(
         songId,
         language
       );
     },
 
-    enabled: Boolean(songId),
-
-    staleTime: 1000 * 60 * 10,
-
-    retry: 1,
-
-    refetchOnWindowFocus: false,
+    enabled: false,
   });
 }
 
-/**
- * EXPLAIN LYRICS
- */
 export function useExplainLyrics(
   songId?: string,
   language: string = "English"
 ) {
-  return useQuery<ExplainLyricsResponse>({
-    queryKey: ["explain-lyrics", songId, language],
+  return useQuery({
+    queryKey: ["explain", songId, language],
 
     queryFn: async () => {
       if (!songId) {
-        throw new Error("Song ID is required");
+        throw new Error("Song ID required");
       }
 
-      return await publicApi.explainLyrics(
+      return publicApi.explainLyrics(
         songId,
         language
       );
     },
 
-    enabled: Boolean(songId),
-
-    staleTime: 1000 * 60 * 10,
-
-    retry: 1,
-
-    refetchOnWindowFocus: false,
+    enabled: false,
   });
 }

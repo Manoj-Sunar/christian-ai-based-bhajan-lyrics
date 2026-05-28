@@ -17,8 +17,8 @@ export enum SongTempo {
  * chords is REQUIRED and NEVER optional
  */
 export interface LyricSection {
-  id: string;
-  name: string;
+  id?: string;
+  name?: string;
   lines: string[];
   chords: string[][];
   repeat?: number;
