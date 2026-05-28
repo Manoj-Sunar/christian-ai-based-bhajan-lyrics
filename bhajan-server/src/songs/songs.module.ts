@@ -6,17 +6,17 @@ import { Song, SongSchema } from '../Model/lyrics.model';
 import { JwtModule } from '@nestjs/jwt';
 import { RedisModule } from '../redis/redis.module';
 import { AiModule } from '../ai/ai.module';
+import { InteractionModule } from '../interaction/interaction.module'; // Import this
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Song.name, schema: SongSchema }]),
-    JwtModule.register({
-
-    }),
+    JwtModule.register({}),
     RedisModule,
-    AiModule
+    AiModule,
+    InteractionModule, // Add this - makes InteractionService available
   ],
   providers: [SongsService],
-  controllers: [SongsController]
+  controllers: [SongsController],
 })
-export class SongsModule { }
+export class SongsModule {}

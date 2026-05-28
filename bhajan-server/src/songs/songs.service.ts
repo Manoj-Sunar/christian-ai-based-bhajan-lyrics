@@ -16,331 +16,144 @@ import {
 } from 'mongoose';
 
 import { RedisService } from '../redis/redis.service';
-
 import { ErrorUtil } from '../error-handler/error.utils';
-
 import { AiService } from '../ai/ai.service';
+import { InteractionService } from '../interaction/interaction.service';
+import { InteractionType } from '../Model/user.interaction.model';
 
 import slugify from 'slugify';
-
 import crypto from 'crypto';
 
 @Injectable()
 export class SongsService {
-    private readonly logger =
-        new Logger(SongsService.name);
-
+    private readonly logger = new Logger(SongsService.name);
     private readonly CACHE_TTL = 3600;
 
     constructor(
         @InjectModel(Song.name)
         private readonly songModel: Model<SongDocument>,
-
         private readonly aiService: AiService,
-
         private readonly redis: RedisService,
+        private readonly interactionService: InteractionService,
     ) { }
 
-    // ====================================
-    // CACHE KEYS
-    // ====================================
-
     private cacheKeys = {
-        songById: (id: string) =>
-            `song:id:${id}`,
-
-        songBySlug: (slug: string) =>
-            `song:slug:${slug}`,
-
+        songById: (id: string) => `song:id:${id}`,
+        songBySlug: (slug: string) => `song:slug:${slug}`,
         songsAll: () => `songs:all`,
-
-        songsPage: (
-            page: number,
-            limit: number,
-        ) =>
-            `songs:page:${page}:limit:${limit}`,
-
-        songsCategory: (
-            category: string,
-        ) =>
-            `songs:category:${category}`,
     };
 
-    // ====================================
-    // CLEAN AI RESPONSE
-    // ====================================
-
-    private cleanAIResponse(
-        text: string,
-    ): string {
+    private cleanAIResponse(text: string): string {
         if (!text) return '';
-
         return text
             .replace(/```json/g, '')
             .replace(/```/g, '')
             .trim();
     }
 
-    // ====================================
-    // EXTRACT JSON
-    // ====================================
-
     private extractJSON(text: string) {
         try {
-            const match =
-                text.match(
-                    /(\{[\s\S]*\})/,
-                );
-
-            if (!match?.[1]) {
-                return null;
-            }
-
-            return JSON.parse(
-                match[1],
-            );
+            const match = text.match(/(\{[\s\S]*\})/);
+            if (!match?.[1]) return null;
+            return JSON.parse(match[1]);
         } catch (error) {
-
-            this.logger.error(
-                'JSON extraction failed',
-                error,
-            );
-
+            this.logger.error('JSON extraction failed', error);
             return null;
         }
     }
 
-    // ====================================
-    // CLEAN AI TEXT
-    // ====================================
-
-    private cleanAIText(
-        text: string,
-    ): string {
-
+    private cleanAIText(text: string): string {
         if (!text) return '';
-
         return text
             .replace(/\*\*/g, '')
             .replace(/\\n/g, '\n')
             .replace(/\\/g, '')
-            .replace(
-                /^\s*\*\s?/gm,
-                '• ',
-            )
-            .replace(/（/g, '(')
-            .replace(/）/g, ')')
-            .replace(
-                /[ \t]+/g,
-                ' ',
-            )
-            .replace(
-                /\n{3,}/g,
-                '\n\n',
-            )
+            .replace(/^\s*\*\s?/gm, '• ')
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
             .trim();
     }
 
-    // ====================================
-    // NORMALIZE EXPLANATION
-    // ====================================
-
-    private normalizeExplanation(
-        data: any[],
-    ) {
-
-        if (!Array.isArray(data)) {
-            return [];
-        }
-
-        return data.map(
-            (item) => ({
-                title:
-                    this.cleanAIText(
-                        item?.title || '',
-                    ),
-
-                content:
-                    this.cleanAIText(
-                        item?.content || '',
-                    ),
-            }),
-        );
+    private normalizeExplanation(data: any[]) {
+        if (!Array.isArray(data)) return [];
+        return data.map((item) => ({
+            title: this.cleanAIText(item?.title || ''),
+            content: this.cleanAIText(item?.content || ''),
+        }));
     }
 
-    // ====================================
-    // GENERATE SLUG
-    // ====================================
-
-    private generateSlug(
-        title: string,
-    ) {
-
-        return `${slugify(title, {
-            lower: true,
-            strict: true,
-            trim: true,
-        })}-${Date.now()}`;
+    private generateSlug(title: string) {
+        return `${slugify(title, { lower: true, strict: true, trim: true })}-${Date.now()}`;
     }
 
-    // ====================================
-    // GET SONG BY ID
-    // ====================================
-
-    async getSongById(id: string) {
-
-        if (
-            !Types.ObjectId.isValid(id)
-        ) {
-            throw ErrorUtil.badRequest(
-                'Invalid song id',
-            );
+    async getSongById(id: string, trackView: boolean = false, userId?: string) {
+        if (!Types.ObjectId.isValid(id)) {
+            throw ErrorUtil.badRequest('Invalid song id');
         }
 
-        const cacheKey =
-            this.cacheKeys.songById(
-                id,
-            );
+        const cacheKey = this.cacheKeys.songById(id);
+        const cached = await this.redis.get(cacheKey);
 
-        const cached =
-            await this.redis.get(
-                cacheKey,
-            );
-
+        let song;
         if (cached) {
-            return cached;
+            song = cached;
+        } else {
+            song = await this.songModel.findById(id).lean();
+            if (!song) throw ErrorUtil.notFound('Song not found');
+            await this.redis.set(cacheKey, song, this.CACHE_TTL);
         }
 
-        const song =
-            await this.songModel
-                .findById(id)
-                .lean();
-
-        if (!song) {
-            throw ErrorUtil.notFound(
-                'Song not found',
-            );
+        // Track view if requested
+        if (trackView && userId) {
+            await this.interactionService.track(userId, id, InteractionType.VIEW);
         }
-
-        await this.redis.set(
-            cacheKey,
-            song,
-            this.CACHE_TTL,
-        );
 
         return song;
     }
 
-    // ====================================
-    // GET SONG BY SLUG
-    // ====================================
+    async getSongBySlug(slug: string, trackView: boolean = false, userId?: string) {
+        const cacheKey = this.cacheKeys.songBySlug(slug);
+        const cached = await this.redis.get(cacheKey);
 
-    async getSongBySlug(
-        slug: string,
-    ) {
-
-        const cacheKey =
-            this.cacheKeys.songBySlug(
-                slug,
-            );
-
-        const cached =
-            await this.redis.get(
-                cacheKey,
-            );
-
+        let song;
         if (cached) {
-            return cached;
+            song = cached;
+        } else {
+            song = await this.songModel.findOne({ slug }).lean();
+            if (!song) throw ErrorUtil.notFound('Song not found');
+            await this.redis.set(cacheKey, song, this.CACHE_TTL);
         }
 
-        const song =
-            await this.songModel
-                .findOne({ slug })
-                .lean();
-
-        if (!song) {
-            throw ErrorUtil.notFound(
-                'Song not found',
-            );
+        if (trackView && userId) {
+            await this.interactionService.track(userId, song._id.toString(), InteractionType.VIEW);
         }
-
-        await this.redis.set(
-            cacheKey,
-            song,
-            this.CACHE_TTL,
-        );
 
         return song;
     }
-
-    // ====================================
-    // GET ALL SONGS
-    // ====================================
 
     async getAllSongs() {
+        const cacheKey = this.cacheKeys.songsAll();
+        const cached = await this.redis.get(cacheKey);
 
-        const cacheKey =
-            this.cacheKeys.songsAll();
+        if (cached) return cached;
 
-        const cached =
-            await this.redis.get(
-                cacheKey,
-            );
+        const songs = await this.songModel
+            .find({ isActive: true })
+            .sort({ createdAt: -1 })
+            .lean();
 
-        if (cached) {
-            return cached;
-        }
-
-        const songs =
-            await this.songModel
-                .find({
-                    isActive: true,
-                })
-                .sort({
-                    createdAt: -1,
-                })
-                .lean();
-
-        await this.redis.set(
-            cacheKey,
-            songs,
-            this.CACHE_TTL,
-        );
-
+        await this.redis.set(cacheKey, songs, this.CACHE_TTL);
         return songs;
     }
 
-    // ====================================
-    // GET PAGINATED SONGS
-    // ====================================
 
- 
+    
+    async explainLyrics(songId: string, language: string) {
+        const song: any = await this.getSongById(songId);
 
-    // ====================================
-    // EXPLAIN LYRICS
-    // ====================================
-
-    async explainLyrics(
-        songId: string,
-        language: string,
-    ) {
-
-        const song: any =
-            await this.getSongById(
-                songId,
-            );
-
-        const lyricsText =
-            song.lyrics
-                .map(
-                    (
-                        section: any,
-                    ) =>
-                        `[${section.name.toUpperCase()}]\n${section.lines.join(
-                            '\n',
-                        )}`,
-                )
-                .join('\n\n');
+        const lyricsText = song.lyrics
+            .map((section: any) => `[${section.name.toUpperCase()}]\n${section.lines.join('\n')}`)
+            .join('\n\n');
 
         const prompt = `
 You are a Christian theologian and worship song analyst.
@@ -351,188 +164,76 @@ IMPORTANT RULES:
 - Output MUST be VALID JSON ONLY
 - DO NOT use markdown
 - DO NOT use code blocks
-- DO NOT write explanation outside JSON
 - Response language must be ${language}
 - Use simple and meaningful Christian language
 - Use only biblical/spiritual wording
-- Do not use Hindu religious terminology
-- Use real Bible verses only
-- Keep pastoral tone
-- Keep worship context
 
 RETURN FORMAT:
-
 {
   "explanation": [
-    {
-      "title": "1. Main Meaning",
-      "content": "..."
-    },
-    {
-      "title": "2. Spiritual Message",
-      "content": "..."
-    },
-    {
-      "title": "3. Biblical Context",
-      "content": "..."
-    },
-    {
-      "title": "4. Related Bible Verses",
-      "content": "..."
-    },
-    {
-      "title": "5. Worship Theme",
-      "content": "..."
-    },
-    {
-      "title": "6. Emotional Tone",
-      "content": "..."
-    },
-    {
-      "title": "7. Practical Christian Life Application",
-      "content": "..."
-    }
+    {"title": "1. Main Meaning", "content": "..."},
+    {"title": "2. Spiritual Message", "content": "..."},
+    {"title": "3. Biblical Context", "content": "..."},
+    {"title": "4. Related Bible Verses", "content": "..."},
+    {"title": "5. Worship Theme", "content": "..."},
+    {"title": "6. Emotional Tone", "content": "..."},
+    {"title": "7. Practical Christian Life Application", "content": "..."}
   ]
 }
 
-SONG TITLE:
-${song.title}
-
-CATEGORY:
-${song.category}
-
-LYRICS:
-${lyricsText}
+SONG TITLE: ${song.title}
+CATEGORY: ${song.category}
+LYRICS: ${lyricsText}
 `;
 
         try {
-
-            const response =
-                await this.aiService.generate(
-                    prompt,
-                );
-
-            this.logger.log(
-                response,
-            );
+            const response = await this.aiService.generate(prompt);
+            this.logger.log(response);
 
             let parsed: any;
 
             try {
-
-                parsed =
-                    JSON.parse(
-                        this.cleanAIResponse(
-                            response,
-                        ),
-                    );
-
+                parsed = JSON.parse(this.cleanAIResponse(response));
             } catch {
-
-                parsed =
-                    this.extractJSON(
-                        response,
-                    );
+                parsed = this.extractJSON(response);
             }
 
-            if (
-                !parsed ||
-                !Array.isArray(
-                    parsed.explanation,
-                )
-            ) {
-
-                this.logger.error(
-                    'Invalid AI explanation response',
-                    response,
-                );
-
+            if (!parsed || !Array.isArray(parsed.explanation)) {
+                this.logger.error('Invalid AI explanation response', response);
                 return {
-                    song:
-                        song.title,
-
-                    explanation: [
-                        {
-                            title:
-                                'Explanation Unavailable',
-
-                            content:
-                                'AI could not generate structured explanation.',
-                        },
-                    ],
+                    song: song.title,
+                    explanation: [{
+                        title: 'Explanation Unavailable',
+                        content: 'AI could not generate structured explanation.',
+                    }],
                 };
             }
 
             return {
-                song:
-                    song.title,
-
-                explanation:
-                    this.normalizeExplanation(
-                        parsed.explanation,
-                    ),
+                song: song.title,
+                explanation: this.normalizeExplanation(parsed.explanation),
             };
-
         } catch (error) {
-
-            this.logger.error(
-                'Explain lyrics failed',
-                error,
-            );
-
-            throw ErrorUtil.internal(
-                'Lyrics explanation failed',
-            );
+            this.logger.error('Explain lyrics failed', error);
+            throw ErrorUtil.internal('Lyrics explanation failed');
         }
     }
 
-    // ====================================
-    // CONVERT LYRICS
-    // ====================================
 
-    async convertLyrics(
-        songId: string,
-        language: string,
-    ) {
 
-        const song: any =
-            await this.getSongById(
-                songId,
-            );
+    async convertLyrics(songId: string, language: string) {
+        const song: any = await this.getSongById(songId);
 
-        if (
-            !song ||
-            !song.lyrics
-        ) {
-            throw ErrorUtil.badRequest(
-                'Invalid song',
-            );
+        if (!song || !song.lyrics) {
+            throw ErrorUtil.badRequest('Invalid song');
         }
 
-        const lyricsText =
-            song.lyrics
-                .map((s: any) => {
-
-                    const chordText =
-                        s.chords &&
-                            Array.isArray(
-                                s.chords,
-                            )
-                            ? s.chords
-                                .map(
-                                    (
-                                        line: string[],
-                                    ) =>
-                                        line.join(
-                                            ' ',
-                                        ),
-                                )
-                                .join(
-                                    '\n',
-                                )
-                            : '';
-
-                    return `
+        const lyricsText = song.lyrics
+            .map((s: any) => {
+                const chordText = s.chords && Array.isArray(s.chords)
+                    ? s.chords.map((line: string[]) => line.join(' ')).join('\n')
+                    : '';
+                return `
 [${s.name.toUpperCase()}]
 
 Lyrics:
@@ -541,20 +242,17 @@ ${s.lines.join('\n')}
 Chords:
 ${chordText}
 `;
-                })
-                .join('\n\n');
+            })
+            .join('\n\n');
 
         const prompt = `
 You are a professional Christian worship translator and arranger.
 
 IMPORTANT:
 - Output MUST be valid JSON only
-- NO markdown
-- NO explanation
-- NO code blocks
+- NO markdown, NO explanation, NO code blocks
 
 Return format:
-
 {
   "title": "translated title",
   "language": "${language}",
@@ -562,14 +260,8 @@ Return format:
     "lyrics": [
       {
         "name": "Verse 1",
-        "lines": [
-          "line 1",
-          "line 2"
-        ],
-        "chords": [
-          ["C", "G"],
-          ["Am", "F"]
-        ],
+        "lines": ["line 1", "line 2"],
+        "chords": [["C", "G"], ["Am", "F"]],
         "repeat": 1
       }
     ]
@@ -582,157 +274,53 @@ Rules:
 - Keep singable structure
 - chords MUST be string[][]
 - chords count should match lines count
-- Maintain worship tone
 
 SONG:
 ${lyricsText}
 `;
 
         try {
-
-            const aiResponse =
-                await this.aiService.generate(
-                    prompt,
-                );
-
-            const cleaned =
-                this.cleanAIResponse(
-                    aiResponse,
-                );
-
+            const aiResponse = await this.aiService.generate(prompt);
+            const cleaned = this.cleanAIResponse(aiResponse);
             let parsed: any;
 
             try {
-
-                parsed =
-                    JSON.parse(
-                        cleaned,
-                    );
-
+                parsed = JSON.parse(cleaned);
             } catch {
-
-                parsed =
-                    this.extractJSON(
-                        aiResponse,
-                    );
+                parsed = this.extractJSON(aiResponse);
             }
 
-            if (
-                !parsed ||
-                !parsed.translatedSong
-            ) {
-
-                this.logger.error(
-                    'Invalid AI response',
-                    aiResponse,
-                );
-
-                throw ErrorUtil.internal(
-                    'Invalid AI response format',
-                );
-            }
-
-            if (
-                !Array.isArray(
-                    parsed
-                        .translatedSong
-                        .lyrics,
-                )
-            ) {
-
-                throw ErrorUtil.internal(
-                    'AI lyrics format invalid',
-                );
+            if (!parsed || !parsed.translatedSong || !Array.isArray(parsed.translatedSong.lyrics)) {
+                this.logger.error('Invalid AI response', aiResponse);
+                throw ErrorUtil.internal('Invalid AI response format');
             }
 
             const convertedSong = {
-
-                title:
-                    parsed.title,
-
-                slug:
-                    this.generateSlug(
-                        parsed.title,
-                    ),
-
-                category:
-                    song.category,
-
-                scale:
-                    song.scale,
-
-                tempo:
-                    song.tempo,
-
-                lyrics:
-                    parsed.translatedSong.lyrics.map(
-                        (
-                            sec: any,
-                            index: number,
-                        ) => {
-
-                            const lines =
-                                Array.isArray(
-                                    sec.lines,
-                                )
-                                    ? sec.lines
-                                    : [];
-
-                            const chords =
-                                Array.isArray(
-                                    sec.chords,
-                                )
-                                    ? sec.chords
-                                    : [];
-
-                            return {
-
-                                name:
-                                    sec.name ||
-                                    `Section ${index + 1}`,
-
-                                id:
-                                    crypto.randomUUID(),
-
-                                lines,
-
-                                chords,
-
-                                repeat:
-                                    sec.repeat ||
-                                    1,
-                            };
-                        },
-                    ),
-
-                tags:
-                    song.tags || [],
-
+                title: parsed.title,
+                slug: this.generateSlug(parsed.title),
+                category: song.category,
+                scale: song.scale,
+                tempo: song.tempo,
+                lyrics: parsed.translatedSong.lyrics.map((sec: any, index: number) => ({
+                    name: sec.name || `Section ${index + 1}`,
+                    id: crypto.randomUUID(),
+                    lines: Array.isArray(sec.lines) ? sec.lines : [],
+                    chords: Array.isArray(sec.chords) ? sec.chords : [],
+                    repeat: sec.repeat || 1,
+                })),
+                tags: song.tags || [],
                 isActive: true,
             };
 
             return {
-
-                originalSongId:
-                    song._id,
-
-                originalTitle:
-                    song.title,
-
+                originalSongId: song._id,
+                originalTitle: song.title,
                 language,
-
                 convertedSong,
             };
-
         } catch (err) {
-
-            this.logger.error(
-                err,
-            );
-
-            throw ErrorUtil.internal(
-                'Lyrics conversion failed',
-            );
+            this.logger.error(err);
+            throw ErrorUtil.internal('Lyrics conversion failed');
         }
     }
 }

@@ -44,8 +44,7 @@ export class LyricSection {
   repeat!: number;
 }
 
-export const LyricSectionSchema =
-  SchemaFactory.createForClass(LyricSection);
+export const LyricSectionSchema = SchemaFactory.createForClass(LyricSection);
 
 @Schema({
   timestamps: true,
@@ -80,11 +79,9 @@ export class Song {
   @Prop({ default: true })
   isActive!: boolean;
 
-  // ================= AI VECTOR =================
   @Prop({ type: [Number], default: [] })
   embedding!: number[];
 
-  // ================= ANALYTICS =================
   @Prop({ default: 0 })
   viewCount!: number;
 
@@ -94,8 +91,8 @@ export class Song {
 
 export const SongSchema = SchemaFactory.createForClass(Song);
 
-// Auto slug
-SongSchema.pre('validate', function () {
+// Auto slug before validate
+SongSchema.pre('validate', function() {
   if (!this.slug || this.slug.trim().length === 0) {
     this.slug = slugify(this.title || 'song', {
       lower: true,
@@ -103,4 +100,8 @@ SongSchema.pre('validate', function () {
       trim: true,
     });
   }
+  
 });
+
+// Create text index for search
+SongSchema.index({ title: 'text', tags: 'text' });

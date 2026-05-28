@@ -21,6 +21,7 @@ import {
 
 import { RedisService } from '../redis/redis.service';
 import { ErrorUtil } from '../error-handler/error.utils';
+import { EmbeddingService } from '../embedding/embedding.service';
 
 import { CreateSongDto } from '../DTO/create-song.dto';
 import { UpdateSongDto } from '../DTO/update-song.dto';
@@ -34,24 +35,16 @@ export class AdminService {
     @InjectModel(Song.name)
     private readonly songModel: Model<SongDocument>,
     private readonly redis: RedisService,
+    private readonly embeddingService: EmbeddingService,
   ) { }
 
-  // -------------------------
-  // CACHE KEYS
-  // -------------------------
   private cacheKeys = {
     songById: (id: string) => `song:id:${id}`,
     songBySlug: (slug: string) => `song:slug:${slug}`,
     songsAll: () => `songs:all`,
-    songsPage: (page: number, limit: number) =>
-      `songs:page:${page}:limit:${limit}`,
-    songsCategory: (category: string) =>
-      `songs:category:${category}`,
+    songsCategory: (category: string) => `songs:category:${category}`,
   };
 
-  // -------------------------
-  // HELPERS
-  // -------------------------
   private generateSlug(title: string): string {
     const slug = slugify(title, {
       lower: true,
@@ -59,7 +52,6 @@ export class AdminService {
       trim: true,
     });
 
-    // fallback for non-latin titles (Nepali, Chinese, etc.)
     if (!slug || slug.length === 0) {
       return `song-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     }
@@ -67,34 +59,26 @@ export class AdminService {
     return slug;
   }
 
-  private async clearSongCaches() {
+  private async clearSongCaches(): Promise<void> {
     await this.redis.deleteByPattern('songs:*');
+    await this.redis.deleteByPattern('song:*');
   }
 
-  // -------------------------
-  // CREATE SONG (SAFE)
-  // -------------------------
   async createSong(dto: CreateSongDto) {
     const session = await this.songModel.db.startSession();
     session.startTransaction();
 
     try {
-      // 1. Normalize input slug (DO NOT re-slugify if already valid)
       let slugSource = dto.slug?.trim();
-
       if (!slugSource) {
         slugSource = dto.title;
       }
 
-      // 2. Generate slug safely (handles Nepali + fallback)
       let slug = this.generateSlug(slugSource);
-
-      // 3. FINAL safety fallback (VERY IMPORTANT for non-latin languages)
       if (!slug || slug.length === 0) {
         slug = `song-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       }
 
-      // 4. Check duplicate
       const exists = await this.songModel.exists({
         $or: [
           { slug },
@@ -103,34 +87,35 @@ export class AdminService {
       });
 
       if (exists) {
-        throw ErrorUtil.conflict('Song already exists');
+        throw ErrorUtil.conflict('Song already exists (slug or number conflict)');
       }
 
-      // 5. Create payload
+      // Create payload first to get ID
       const payload = {
         ...dto,
         slug,
       };
 
-      // 6. Save in transaction
-      const song = await this.songModel.create([payload], { session });
+      const [song] = await this.songModel.create([payload], { session });
 
-      const saved = song[0].toObject();
+      // Generate and save embedding
+      try {
+        const embedding = await this.embeddingService.generateSongEmbedding(song);
+        song.embedding = embedding;
+        await song.save({ session });
+      } catch (embedError) {
+        this.logger.warn(`Embedding generation failed: ${embedError}`);
+        // Continue without embedding
+      }
 
       await session.commitTransaction();
 
-      // 7. Cache safely AFTER commit
+      const saved = song.toObject();
+
+      // Cache the song
       await Promise.all([
-        this.redis.set(
-          this.cacheKeys.songById(saved._id.toString()),
-          saved,
-          this.CACHE_TTL,
-        ),
-        this.redis.set(
-          this.cacheKeys.songBySlug(slug),
-          saved,
-          this.CACHE_TTL,
-        ),
+        this.redis.set(this.cacheKeys.songById(saved._id.toString()), saved, this.CACHE_TTL),
+        this.redis.set(this.cacheKeys.songBySlug(slug), saved, this.CACHE_TTL),
         this.clearSongCaches(),
       ]);
 
@@ -144,9 +129,6 @@ export class AdminService {
     }
   }
 
-  // -------------------------
-  // UPDATE SONG
-  // -------------------------
   async updateSong(id: string, dto: UpdateSongDto) {
     if (!Types.ObjectId.isValid(id)) {
       throw ErrorUtil.badRequest('Invalid song id');
@@ -156,10 +138,10 @@ export class AdminService {
     if (!song) throw ErrorUtil.notFound('Song not found');
 
     const oldSlug = song.slug;
+    let needsNewEmbedding = false;
 
     if (dto.title && dto.title !== song.title) {
       const newSlug = this.generateSlug(dto.title);
-
       const exists = await this.songModel.exists({
         slug: newSlug,
         _id: { $ne: song._id },
@@ -170,9 +152,34 @@ export class AdminService {
       }
 
       dto.slug = newSlug;
+      needsNewEmbedding = true;
+    }
+
+    // Check if lyrics changed
+    if (dto.lyrics && JSON.stringify(dto.lyrics) !== JSON.stringify(song.lyrics)) {
+      needsNewEmbedding = true;
+    }
+
+    if (dto.tags && JSON.stringify(dto.tags) !== JSON.stringify(song.tags)) {
+      needsNewEmbedding = true;
+    }
+
+    if (dto.category && dto.category !== song.category) {
+      needsNewEmbedding = true;
     }
 
     Object.assign(song, dto);
+
+    // Regenerate embedding if needed
+    if (needsNewEmbedding) {
+      try {
+        const embedding = await this.embeddingService.generateSongEmbedding(song);
+        song.embedding = embedding;
+      } catch (embedError) {
+        this.logger.warn(`Embedding update failed: ${embedError}`);
+      }
+    }
+
     await song.save();
 
     const updated = song.toObject();
@@ -180,20 +187,13 @@ export class AdminService {
     await Promise.all([
       this.redis.set(this.cacheKeys.songById(id), updated, this.CACHE_TTL),
       this.redis.set(this.cacheKeys.songBySlug(song.slug), updated, this.CACHE_TTL),
-
-      oldSlug !== song.slug
-        ? this.redis.del(this.cacheKeys.songBySlug(oldSlug))
-        : Promise.resolve(),
-
+      oldSlug !== song.slug ? this.redis.del(this.cacheKeys.songBySlug(oldSlug)) : Promise.resolve(),
       this.clearSongCaches(),
     ]);
 
     return updated;
   }
 
-  // -------------------------
-  // DELETE SONG
-  // -------------------------
   async deleteSong(id: string) {
     if (!Types.ObjectId.isValid(id)) {
       throw ErrorUtil.badRequest('Invalid song id');
@@ -216,4 +216,30 @@ export class AdminService {
       message: 'Song deleted successfully',
     };
   }
+
+  async getSongById(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw ErrorUtil.badRequest('Invalid song id');
+    }
+
+    const cached = await this.redis.get(this.cacheKeys.songById(id));
+    if (cached) return cached;
+
+    const song = await this.songModel.findById(id).lean();
+    if (!song) throw ErrorUtil.notFound('Song not found');
+
+    await this.redis.set(this.cacheKeys.songById(id), song, this.CACHE_TTL);
+    return song;
+  }
+
+  async getAllSongs() {
+    const cached = await this.redis.get(this.cacheKeys.songsAll());
+    if (cached) return cached;
+
+    const songs = await this.songModel.find({ isActive: true }).sort({ createdAt: -1 }).lean();
+    await this.redis.set(this.cacheKeys.songsAll(), songs, this.CACHE_TTL);
+    return songs;
+  }
+
+  
 }
